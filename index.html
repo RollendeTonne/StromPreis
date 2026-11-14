@@ -86,6 +86,10 @@
         <option value="DK1">Dänemark West (DK1)</option>
         <option value="DK2">Dänemark Ost (DK2)</option>
       </select>
+      <div class="seg" id="modeSeg" role="group" aria-label="Preisart">
+        <button data-mode="spot">Börse</button>
+        <button data-mode="end" class="on">Endpreis 91413</button>
+      </div>
       <div class="seg" id="unitSeg" role="group" aria-label="Einheit">
         <button data-unit="ct" class="on">ct/kWh</button>
         <button data-unit="mwh">€/MWh</button>
@@ -128,10 +132,19 @@
     </div>
   </div>
 
+  <div class="card" id="partsCard">
+    <h2>Preisbestandteile Endpreis (PLZ 91413, Haushalt)</h2>
+    <div class="meta">Werte netto in ct/kWh, editierbar. Endpreis = (Börsenpreis + Summe) × (1 + MwSt). Der Grundpreis pro Jahr ist nicht enthalten.</div>
+    <div id="parts"></div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="partsReset">Auf Standardwerte zurücksetzen</button>
+    </div>
+  </div>
+
   <footer>
     Datenquelle: <a href="https://www.energy-charts.info" target="_blank" rel="noopener">Energy-Charts (Fraunhofer ISE)</a>, Lizenz CC BY 4.0;
     Ausweichquelle für DE-LU/AT: <a href="https://www.awattar.de" target="_blank" rel="noopener">aWATTar</a>.
-    Reine Börsenpreise ohne Netzentgelte, Steuern, Umlagen und MwSt. Zeiten in Europe/Berlin.
+    Im Modus „Börse“ reine Börsenpreise, im Modus „Endpreis“ inkl. Netzentgelt, Abgaben, Umlagen, Stromsteuer und MwSt (ohne Grundpreis und ohne Aufschlag des Stromlieferanten, sofern nicht eingetragen). Zeiten in Europe/Berlin.
     Die Seite holt alle 15 Minuten neue Daten. Solange die Preise für morgen fehlen (Auktionsergebnis ca. 12:45–13:00 Uhr), fragt sie alle 5 Minuten nach.
   </footer>
 </div>
@@ -141,8 +154,28 @@
   "use strict";
   const TZ = "Europe/Berlin";
   const SNAPSHOT = {"unix_seconds":[1794610800,1794611700,1794612600,1794613500,1794614400,1794615300,1794616200,1794617100,1794618000,1794618900,1794619800,1794620700,1794621600,1794622500,1794623400,1794624300,1794625200,1794626100,1794627000,1794627900,1794628800,1794629700,1794630600,1794631500,1794632400,1794633300,1794634200,1794635100,1794636000,1794636900,1794637800,1794638700,1794639600,1794640500,1794641400,1794642300,1794643200,1794644100,1794645000,1794645900,1794646800,1794647700,1794648600,1794649500,1794650400,1794651300,1794652200,1794653100,1794654000,1794654900,1794655800,1794656700,1794657600,1794658500,1794659400,1794660300,1794661200,1794662100,1794663000,1794663900,1794664800,1794665700,1794666600,1794667500,1794668400,1794669300,1794670200,1794671100,1794672000,1794672900,1794673800,1794674700,1794675600,1794676500,1794677400,1794678300,1794679200,1794680100,1794681000,1794681900,1794682800,1794683700,1794684600,1794685500,1794686400,1794687300,1794688200,1794689100,1794690000,1794690900,1794691800,1794692700,1794693600,1794694500,1794695400,1794696300,1794697200,1794698100,1794699000,1794699900,1794700800,1794701700,1794702600,1794703500,1794704400,1794705300,1794706200,1794707100,1794708000,1794708900,1794709800,1794710700,1794711600,1794712500,1794713400,1794714300,1794715200,1794716100,1794717000,1794717900,1794718800,1794719700,1794720600,1794721500,1794722400,1794723300,1794724200,1794725100,1794726000,1794726900,1794727800,1794728700,1794729600,1794730500,1794731400,1794732300,1794733200,1794734100,1794735000,1794735900,1794736800,1794737700,1794738600,1794739500,1794740400,1794741300,1794742200,1794743100,1794744000,1794744900,1794745800,1794746700,1794747600,1794748500,1794749400,1794750300,1794751200,1794752100,1794753000,1794753900,1794754800,1794755700,1794756600,1794757500,1794758400,1794759300,1794760200,1794761100,1794762000,1794762900,1794763800,1794764700,1794765600,1794766500,1794767400,1794768300,1794769200,1794770100,1794771000,1794771900,1794772800,1794773700,1794774600,1794775500,1794776400,1794777300,1794778200,1794779100,1794780000,1794780900,1794781800,1794782700],"price":[202.01,190.52,186.37,186.67,190.14,187.74,184.58,183.3,182.3,181.58,178.86,177.74,183.21,182.08,181.49,179.46,177.6,177.07,180.11,180.24,177.8,179.69,179.12,182.46,179.74,190.37,199.06,205.12,218.48,224.54,229.94,224.58,240.11,223.8,216.65,199.72,193.19,187.33,176.27,166.26,168.46,160.73,161.32,164.84,150.01,146.45,147.08,148.45,146.65,144.93,145.0,148.52,152.68,154.44,160.39,159.3,162.21,178.73,199.09,218.3,188.51,204.01,224.7,238.53,231.98,242.95,249.18,253.15,255.21,266.38,267.45,264.44,265.02,259.99,253.96,246.14,247.38,249.92,245.11,234.45,219.11,202.48,203.41,205.8,202.47,207.71,202.56,196.81,210.44,198.47,205.95,196.29,198.98,192.05,184.95,180.25,175.62,169.81,168.11,153.38,175.06,161.45,157.83,153.04,158.25,151.54,148.93,140.07,140.71,134.95,129.16,128.63,133.23,132.45,131.88,130.05,136.82,133.32,131.57,125.91,126.66,128.05,128.31,130.57,134.88,135.08,133.45,130.62,135.68,123.23,117.85,110.94,106.48,102.89,102.9,102.97,108.32,103.86,102.74,100.0,101.52,100.01,100.02,99.27,97.85,98.98,98.01,104.34,108.97,111.67,113.08,121.73,133.89,149.1,157.54,163.49,168.33,168.59,176.3,178.46,174.39,175.06,174.53,172.99,179.75,179.32,177.21,176.21,167.83,167.6,164.66,166.6,168.46,166.38,162.45,161.06,155.69,156.17,157.51,150.22,154.83,149.54,143.51,138.71,154.99,145.88,141.97,133.0,130.83,120.77,118.56,105.76],"fetched":"2026-11-14T21:23:00Z"};
-  const state = { zone: "DE-LU", unit: "ct", day: 0, points: [], source: "", fetchedAt: null, error: null, step: 900 };
-  try { const s = JSON.parse(localStorage.getItem("dapPrefs") || "{}"); if (s.zone) state.zone = s.zone; if (s.unit) state.unit = s.unit; } catch (e) {}
+  const state = { zone: "DE-LU", unit: "ct", mode: "end", day: 0, raw: [], points: [], source: "", fetchedAt: null, error: null, step: 900 };
+  // Preisbestandteile 2026, netto ct/kWh (Haushalt, < 1 GWh/a)
+  const PARTS_DEFAULT = [
+    { k: "netz", label: "Netzentgelt Arbeitspreis (Stadtwerke Neustadt a.d. Aisch)", v: 12.92, note: "abgeleitet aus 15,37 ct/kWh brutto (energiemarie.de) – bitte mit Preisblatt prüfen" },
+    { k: "ka", label: "Konzessionsabgabe (Tarifkunde, Gemeinde bis 25.000 Einw.)", v: 1.32, note: "KAV" },
+    { k: "stromsteuer", label: "Stromsteuer", v: 2.05, note: "Regelsatz" },
+    { k: "nev19", label: "Aufschlag für besondere Netznutzung (§ 19 StromNEV)", v: 1.559, note: "2026" },
+    { k: "offshore", label: "Offshore-Netzumlage", v: 0.941, note: "2026" },
+    { k: "kwkg", label: "KWKG-Umlage", v: 0.446, note: "2026" },
+    { k: "lieferant", label: "Aufschlag Stromlieferant (optional)", v: 0, note: "laut deinem Tarif" },
+  ];
+  const VAT_DEFAULT = 19;
+  let parts = PARTS_DEFAULT.map(x => ({ ...x })), vat = VAT_DEFAULT;
+  try {
+    const s = JSON.parse(localStorage.getItem("dapPrefs") || "{}");
+    if (s.zone) state.zone = s.zone; if (s.unit) state.unit = s.unit; if (s.mode) state.mode = s.mode;
+    if (s.parts) for (const x of parts) if (typeof s.parts[x.k] === "number") x.v = s.parts[x.k];
+    if (typeof s.vat === "number") vat = s.vat;
+  } catch (e) {}
+  const addCt = () => parts.reduce((a, x) => a + (+x.v || 0), 0);
+  const priceOf = (spot) => state.mode === "end" ? (spot / 10 + addCt()) * (1 + vat / 100) * 10 : spot; // €/MWh
+  function applyMode() { state.points = state.raw.map(x => ({ ...x, p: priceOf(x.spot) })); }
 
   const $ = (id) => document.getElementById(id);
   const fmtParts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -217,9 +250,11 @@
     diffs.sort((a, b) => a - b);
     const step = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 3600000;
     state.step = step;
-    state.points = res.pts
+    state.raw = res.pts
       .map(x => ({ t: x.t, e: x.e || x.t + step, p: x.p, d: berlin(x.t).date }))
-      .filter(x => x.d === today || x.d === tomorrow);
+      .filter(x => x.d === today || x.d === tomorrow)
+      .map(x => ({ ...x, spot: x.p }));
+    applyMode();
     state.dataAt = res.dataAt || null; state.source = res.source; state.snapshot = !!res.snapshot; state.fetchedAt = res.snapshot ? Date.parse(SNAPSHOT.fetched) : Date.now(); state.error = null;
     render(); scheduleNext();
   }
@@ -284,10 +319,10 @@
     const now = Date.now();
     const cur = state.points.find(x => x.t <= now && now < x.e);
     const sT = stats(pT), sM = stats(pM);
-    $("subtitle").textContent = `${dayLabel.format(new Date())} und ${dayLabel.format(new Date(Date.parse(tomorrow + "T12:00:00Z")))} · Gebotszone ${state.zone}`;
+    $("subtitle").textContent = `${dayLabel.format(new Date())} und ${dayLabel.format(new Date(Date.parse(tomorrow + "T12:00:00Z")))} · Gebotszone ${state.zone} · ${state.mode === "end" ? "Endpreis brutto PLZ 91413 (ohne Grundpreis)" : "reiner Börsenpreis netto"}`;
 
     const k = $("kpis"); k.replaceChildren();
-    k.append(kpi("Aktueller Preis", cur ? fmt(cur.p) : "–", cur ? `${hm(cur.t)}–${hm(cur.e)} Uhr` : "kein Wert für jetzt", true));
+    k.append(kpi("Aktueller Preis", cur ? fmt(cur.p) : "–", cur ? `${hm(cur.t)}–${hm(cur.e)} Uhr${state.mode === "end" ? ` · Börse ${fmt(cur.spot)}` : ""}` : "kein Wert für jetzt", true));
     k.append(kpi("Ø heute", sT ? fmt(sT.avg) : "–", sT ? `Min ${fmt(sT.min.p)} (${hm(sT.min.t)}) · Max ${fmt(sT.max.p)} (${hm(sT.max.t)})` : ""));
     k.append(kpi("Ø morgen", sM ? fmt(sM.avg) : "–", sM ? `Min ${fmt(sM.min.p)} (${hm(sM.min.t)}) · Max ${fmt(sM.max.p)} (${hm(sM.max.t)})` : "noch nicht veröffentlicht (ca. 13 Uhr)"));
     let delta = "–", dn = "";
@@ -440,7 +475,35 @@
   }
 
   // ---------- Bedienung ----------
-  function savePrefs() { try { localStorage.setItem("dapPrefs", JSON.stringify({ zone: state.zone, unit: state.unit })); } catch (e) {} }
+  function savePrefs() { try { localStorage.setItem("dapPrefs", JSON.stringify({ zone: state.zone, unit: state.unit, mode: state.mode, vat, parts: Object.fromEntries(parts.map(x => [x.k, +x.v])) })); } catch (e) {} }
+  function renderParts() {
+    const el = $("parts"); el.replaceChildren();
+    const t = document.createElement("table");
+    t.innerHTML = '<thead><tr><th>Bestandteil</th><th class="r">ct/kWh netto</th></tr></thead>';
+    const tb = document.createElement("tbody");
+    const row = (label, note, val, onIn, step) => {
+      const tr = document.createElement("tr");
+      const c1 = document.createElement("td"); c1.textContent = label;
+      if (note) { const n = document.createElement("div"); n.className = "sub"; n.style.fontSize = "11px"; n.textContent = note; c1.append(n); }
+      const c2 = document.createElement("td"); c2.className = "r";
+      const inp = document.createElement("input"); inp.type = "number"; inp.step = step || "0.001"; inp.value = val; inp.inputMode = "decimal";
+      inp.style.cssText = "width:90px;text-align:right;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)";
+      inp.addEventListener("input", () => { const v = parseFloat(inp.value.replace(",", ".")); if (!isNaN(v)) { onIn(v); savePrefs(); applyMode(); render(); updSum(); } });
+      c2.append(inp); tr.append(c1, c2); tb.append(tr);
+    };
+    for (const x of parts) row(x.label, x.note, x.v, v => { x.v = v; });
+    row("Mehrwertsteuer (%)", "auf alle Bestandteile inkl. Börsenpreis", vat, v => { vat = v; }, "1");
+    const trS = document.createElement("tr"); trS.style.fontWeight = "650";
+    const s1 = document.createElement("td"), s2 = document.createElement("td"); s2.className = "r"; trS.append(s1, s2); tb.append(trS);
+    function updSum() { s1.textContent = "Aufschlag gesamt brutto (ohne Börsenpreis)"; s2.textContent = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(addCt() * (1 + vat / 100)) + " ct/kWh"; }
+    updSum(); t.append(tb); el.append(t);
+  }
+  $("partsReset").addEventListener("click", () => { parts = PARTS_DEFAULT.map(x => ({ ...x })); vat = VAT_DEFAULT; savePrefs(); renderParts(); applyMode(); render(); });
+  for (const b of $("modeSeg").querySelectorAll("button")) {
+    b.classList.toggle("on", b.dataset.mode === state.mode);
+    b.addEventListener("click", () => { state.mode = b.dataset.mode; savePrefs(); for (const x of $("modeSeg").children) x.classList.toggle("on", x === b); applyMode(); render(); });
+  }
+  renderParts();
   $("zone").value = state.zone;
   $("zone").addEventListener("change", e => { state.zone = e.target.value; savePrefs(); state.points = []; load(); });
   for (const b of $("unitSeg").querySelectorAll("button")) {
