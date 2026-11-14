@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day-Ahead-Strompreise – Live</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e4e3de;
+    --accent:#2f6fde; --low:#2e9d6a; --mid:#d9a21b; --high:#d2513a; --neg:#6a4fd0;
+    --now:#1d1d1b;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16171a; --card:#1f2024; --ink:#ecebe6; --muted:#9c9b95; --line:#33343a;
+      --accent:#6c9cff; --low:#43b582; --mid:#e0b03a; --high:#e8694f; --neg:#9a84ff; --now:#ecebe6; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 40px}
+  header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+  h1{font-size:22px;margin:0 0 2px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  select,button{font:inherit;font-size:13px;color:var(--ink);background:var(--card);
+    border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+  button:hover,select:hover{border-color:var(--muted)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:0;border-radius:0;padding:6px 10px}
+  .seg button.on{background:var(--ink);color:var(--card)}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:-6px 0 16px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--low);flex:none}
+  .dot.warn{background:var(--mid)} .dot.err{background:var(--high)}
+  .dot.live{animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .l{font-size:12px;color:var(--muted);margin-bottom:4px}
+  .kpi .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .kpi .v small{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
+  .kpi .n{font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .kpi.hero{border-color:var(--accent)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px;position:relative}
+  .card h2{font-size:15px;margin:0 0 2px;font-weight:620}
+  .card .meta{font-size:12px;color:var(--muted);margin-bottom:10px;font-variant-numeric:tabular-nums}
+  .chart{width:100%;position:relative}
+  .chart svg{display:block;width:100%;overflow:visible}
+  .axis text{fill:var(--muted);font-size:11px}
+  .axis line,.grid line{stroke:var(--line)}
+  .zero{stroke:var(--muted);stroke-dasharray:3 3}
+  .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--card);font-size:12px;
+    padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .08s;z-index:5;font-variant-numeric:tabular-nums}
+  .empty{padding:40px 10px;text-align:center;color:var(--muted);font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  td.r,th.r{text-align:right}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+  footer{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.6}
+  footer a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Day-Ahead-Strompreise</h1>
+      <div class="sub" id="subtitle">Heute und morgen · EPEX Spot Day-Ahead-Auktion</div>
+    </div>
+    <div class="controls">
+      <label class="sub" for="zone">Gebotszone</label>
+      <select id="zone">
+        <option value="DE-LU">Deutschland/Luxemburg</option>
+        <option value="AT">Österreich</option>
+        <option value="CH">Schweiz</option>
+        <option value="FR">Frankreich</option>
+        <option value="NL">Niederlande</option>
+        <option value="BE">Belgien</option>
+        <option value="PL">Polen</option>
+        <option value="CZ">Tschechien</option>
+        <option value="DK1">Dänemark West (DK1)</option>
+        <option value="DK2">Dänemark Ost (DK2)</option>
+      </select>
+      <div class="seg" id="unitSeg" role="group" aria-label="Einheit">
+        <button data-unit="ct" class="on">ct/kWh</button>
+        <button data-unit="mwh">€/MWh</button>
+      </div>
+      <button id="refresh" title="Jetzt neu laden">↻ Aktualisieren</button>
+    </div>
+  </header>
+
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Lade Daten …</span></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="card" id="combined">
+    <h2>Verlauf heute &amp; morgen</h2>
+    <div class="meta" id="combinedMeta"></div>
+    <div class="chart" id="chartAll"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--low)"></i>günstiges Drittel</span>
+      <span><i class="sw" style="background:var(--mid)"></i>mittleres Drittel</span>
+      <span><i class="sw" style="background:var(--high)"></i>teures Drittel</span>
+      <span><i class="sw" style="background:var(--neg)"></i>negativ</span>
+      <span><i class="sw" style="background:var(--now);width:2px"></i>jetzt</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card" id="cheapCard">
+      <h2>Günstigste Zeitfenster</h2>
+      <div class="meta">Zusammenhängende Blöcke ab jetzt, Durchschnittspreis</div>
+      <div id="cheap"></div>
+    </div>
+    <div class="card" id="hourCard">
+      <h2>Stundenwerte</h2>
+      <div class="meta" id="hourMeta">Mittel je Stunde</div>
+      <div class="seg" id="daySeg" style="margin-bottom:8px">
+        <button data-day="0" class="on">Heute</button>
+        <button data-day="1">Morgen</button>
+      </div>
+      <div id="hourTable" style="max-height:420px;overflow:auto"></div>
+    </div>
+  </div>
+
+  <footer>
+    Datenquelle: <a href="https://www.energy-charts.info" target="_blank" rel="noopener">Energy-Charts (Fraunhofer ISE)</a>, Lizenz CC BY 4.0;
+    Ausweichquelle für DE-LU/AT: <a href="https://www.awattar.de" target="_blank" rel="noopener">aWATTar</a>.
+    Reine Börsenpreise ohne Netzentgelte, Steuern, Umlagen und MwSt. Zeiten in Europe/Berlin.
+    Die Seite holt alle 15 Minuten neue Daten. Solange die Preise für morgen fehlen (Auktionsergebnis ca. 12:45–13:00 Uhr), fragt sie alle 5 Minuten nach.
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const TZ = "Europe/Berlin";
+  const SNAPSHOT = {"unix_seconds":[1794610800,1794611700,1794612600,1794613500,1794614400,1794615300,1794616200,1794617100,1794618000,1794618900,1794619800,1794620700,1794621600,1794622500,1794623400,1794624300,1794625200,1794626100,1794627000,1794627900,1794628800,1794629700,1794630600,1794631500,1794632400,1794633300,1794634200,1794635100,1794636000,1794636900,1794637800,1794638700,1794639600,1794640500,1794641400,1794642300,1794643200,1794644100,1794645000,1794645900,1794646800,1794647700,1794648600,1794649500,1794650400,1794651300,1794652200,1794653100,1794654000,1794654900,1794655800,1794656700,1794657600,1794658500,1794659400,1794660300,1794661200,1794662100,1794663000,1794663900,1794664800,1794665700,1794666600,1794667500,1794668400,1794669300,1794670200,1794671100,1794672000,1794672900,1794673800,1794674700,1794675600,1794676500,1794677400,1794678300,1794679200,1794680100,1794681000,1794681900,1794682800,1794683700,1794684600,1794685500,1794686400,1794687300,1794688200,1794689100,1794690000,1794690900,1794691800,1794692700,1794693600,1794694500,1794695400,1794696300,1794697200,1794698100,1794699000,1794699900,1794700800,1794701700,1794702600,1794703500,1794704400,1794705300,1794706200,1794707100,1794708000,1794708900,1794709800,1794710700,1794711600,1794712500,1794713400,1794714300,1794715200,1794716100,1794717000,1794717900,1794718800,1794719700,1794720600,1794721500,1794722400,1794723300,1794724200,1794725100,1794726000,1794726900,1794727800,1794728700,1794729600,1794730500,1794731400,1794732300,1794733200,1794734100,1794735000,1794735900,1794736800,1794737700,1794738600,1794739500,1794740400,1794741300,1794742200,1794743100,1794744000,1794744900,1794745800,1794746700,1794747600,1794748500,1794749400,1794750300,1794751200,1794752100,1794753000,1794753900,1794754800,1794755700,1794756600,1794757500,1794758400,1794759300,1794760200,1794761100,1794762000,1794762900,1794763800,1794764700,1794765600,1794766500,1794767400,1794768300,1794769200,1794770100,1794771000,1794771900,1794772800,1794773700,1794774600,1794775500,1794776400,1794777300,1794778200,1794779100,1794780000,1794780900,1794781800,1794782700],"price":[202.01,190.52,186.37,186.67,190.14,187.74,184.58,183.3,182.3,181.58,178.86,177.74,183.21,182.08,181.49,179.46,177.6,177.07,180.11,180.24,177.8,179.69,179.12,182.46,179.74,190.37,199.06,205.12,218.48,224.54,229.94,224.58,240.11,223.8,216.65,199.72,193.19,187.33,176.27,166.26,168.46,160.73,161.32,164.84,150.01,146.45,147.08,148.45,146.65,144.93,145.0,148.52,152.68,154.44,160.39,159.3,162.21,178.73,199.09,218.3,188.51,204.01,224.7,238.53,231.98,242.95,249.18,253.15,255.21,266.38,267.45,264.44,265.02,259.99,253.96,246.14,247.38,249.92,245.11,234.45,219.11,202.48,203.41,205.8,202.47,207.71,202.56,196.81,210.44,198.47,205.95,196.29,198.98,192.05,184.95,180.25,175.62,169.81,168.11,153.38,175.06,161.45,157.83,153.04,158.25,151.54,148.93,140.07,140.71,134.95,129.16,128.63,133.23,132.45,131.88,130.05,136.82,133.32,131.57,125.91,126.66,128.05,128.31,130.57,134.88,135.08,133.45,130.62,135.68,123.23,117.85,110.94,106.48,102.89,102.9,102.97,108.32,103.86,102.74,100.0,101.52,100.01,100.02,99.27,97.85,98.98,98.01,104.34,108.97,111.67,113.08,121.73,133.89,149.1,157.54,163.49,168.33,168.59,176.3,178.46,174.39,175.06,174.53,172.99,179.75,179.32,177.21,176.21,167.83,167.6,164.66,166.6,168.46,166.38,162.45,161.06,155.69,156.17,157.51,150.22,154.83,149.54,143.51,138.71,154.99,145.88,141.97,133.0,130.83,120.77,118.56,105.76],"fetched":"2026-11-14T21:23:00Z"};
+  const state = { zone: "DE-LU", unit: "ct", day: 0, points: [], source: "", fetchedAt: null, error: null, step: 900 };
+  try { const s = JSON.parse(localStorage.getItem("dapPrefs") || "{}"); if (s.zone) state.zone = s.zone; if (s.unit) state.unit = s.unit; } catch (e) {}
+
+  const $ = (id) => document.getElementById(id);
+  const fmtParts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  function berlin(ts) { // ts in ms
+    const p = {}; for (const x of fmtParts.formatToParts(new Date(ts))) p[x.type] = x.value;
+    return { date: `${p.year}-${p.month}-${p.day}`, h: +p.hour, m: +p.minute };
+  }
+  const hm = (ts) => { const b = berlin(ts); return String(b.h).padStart(2, "0") + ":" + String(b.m).padStart(2, "0"); };
+  const dayLabel = new Intl.DateTimeFormat("de-DE", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+  const clock = new Intl.DateTimeFormat("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  function addDays(dateStr, n) { const d = new Date(dateStr + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+  const conv = (eurMwh) => state.unit === "ct" ? eurMwh / 10 : eurMwh;
+  const unitLabel = () => state.unit === "ct" ? "ct/kWh" : "€/MWh";
+  const nf = () => new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (eurMwh) => eurMwh == null || isNaN(eurMwh) ? "–" : nf().format(conv(eurMwh));
+
+  // ---------- Daten laden ----------
+  async function fetchEnergyCharts(zone, d0, d3) {
+    const url = `https://api.energy-charts.info/price?bzn=${encodeURIComponent(zone)}&start=${d0}&end=${d3}`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("Energy-Charts HTTP " + r.status);
+    const j = await r.json();
+    const ts = j.unix_seconds || [], pr = j.price || [];
+    const pts = [];
+    for (let i = 0; i < ts.length; i++) if (pr[i] != null && !isNaN(pr[i])) pts.push({ t: ts[i] * 1000, p: +pr[i] });
+    if (!pts.length) throw new Error("Energy-Charts: keine Werte");
+    return { pts, source: "Energy-Charts" };
+  }
+  async function fetchAwattar(zone, startMs, endMs) {
+    const host = zone === "AT" ? "api.awattar.at" : zone === "DE-LU" ? "api.awattar.de" : null;
+    if (!host) throw new Error("keine Ausweichquelle für " + zone);
+    const r = await fetch(`https://${host}/v1/marketdata?start=${startMs}&end=${endMs}`, { cache: "no-store" });
+    if (!r.ok) throw new Error("aWATTar HTTP " + r.status);
+    const j = await r.json();
+    const pts = (j.data || []).map(d => ({ t: d.start_timestamp, p: +d.marketprice, e: d.end_timestamp }));
+    if (!pts.length) throw new Error("aWATTar: keine Werte");
+    return { pts, source: "aWATTar" };
+  }
+
+  function todayStr() { return berlin(Date.now()).date; }
+
+  async function load() {
+    setStatus("Lade Daten …", "warn", false);
+    const today = todayStr(), tomorrow = addDays(today, 1);
+    const d0 = addDays(today, -1), d3 = addDays(today, 3); // großzügig, dann nach Berliner Datum filtern
+    let res = null, errs = [];
+    try { res = await fetchEnergyCharts(state.zone, d0, d3); } catch (e) { errs.push(e.message); }
+    if (!res) {
+      try { res = await fetchAwattar(state.zone, Date.parse(d0 + "T00:00:00Z"), Date.parse(d3 + "T00:00:00Z")); } catch (e) { errs.push(e.message); }
+    }
+    if (!res && SNAPSHOT) {
+      const pts = []; for (let i = 0; i < SNAPSHOT.unix_seconds.length; i++) pts.push({ t: SNAPSHOT.unix_seconds[i] * 1000, p: SNAPSHOT.price[i] });
+      if (state.zone === "DE-LU" && pts.some(x => berlin(x.t).date === today)) { res = { pts, source: "Energy-Charts", snapshot: true }; }
+      else errs.push("eingebettete Daten gibt es nur für DE-LU und nur für den Abruftag");
+    }
+    if (!res) { state.error = errs.join(" · "); setStatus("Laden fehlgeschlagen: " + state.error, "err", false); render(); scheduleNext(); return; }
+
+    res.pts.sort((a, b) => a.t - b.t);
+    // Auflösung bestimmen (15 min oder 60 min)
+    const diffs = []; for (let i = 1; i < res.pts.length; i++) diffs.push(res.pts[i].t - res.pts[i - 1].t);
+    diffs.sort((a, b) => a - b);
+    const step = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 3600000;
+    state.step = step;
+    state.points = res.pts
+      .map(x => ({ t: x.t, e: x.e || x.t + step, p: x.p, d: berlin(x.t).date }))
+      .filter(x => x.d === today || x.d === tomorrow);
+    state.source = res.source; state.snapshot = !!res.snapshot; state.fetchedAt = res.snapshot ? Date.parse(SNAPSHOT.fetched) : Date.now(); state.error = null;
+    render(); scheduleNext();
+  }
+
+  let timer = null;
+  function scheduleNext() {
+    clearTimeout(timer);
+    const hasTomorrow = state.points.some(x => x.d === addDays(todayStr(), 1));
+    const b = berlin(Date.now());
+    const waitingForTomorrow = !hasTomorrow && (b.h > 12 || (b.h === 12 && b.m >= 30));
+    const ms = state.error ? 2 * 60e3 : waitingForTomorrow ? 5 * 60e3 : 15 * 60e3;
+    timer = setTimeout(load, ms);
+    state.nextAt = Date.now() + ms;
+  }
+
+  // ---------- Kennzahlen ----------
+  function stats(pts) {
+    if (!pts.length) return null;
+    let min = pts[0], max = pts[0], sum = 0;
+    for (const x of pts) { if (x.p < min.p) min = x; if (x.p > max.p) max = x; sum += x.p; }
+    return { min, max, avg: sum / pts.length, n: pts.length };
+  }
+  function cheapestBlock(pts, durMs) {
+    const k = Math.max(1, Math.round(durMs / state.step));
+    if (pts.length < k) return null;
+    let best = null;
+    for (let i = 0; i + k <= pts.length; i++) {
+      if (pts[i + k - 1].t - pts[i].t !== (k - 1) * state.step) continue; // nur lückenlos
+      let s = 0; for (let j = i; j < i + k; j++) s += pts[j].p;
+      const avg = s / k;
+      if (!best || avg < best.avg) best = { start: pts[i].t, end: pts[i + k - 1].e, avg };
+    }
+    return best;
+  }
+
+  // ---------- Darstellung ----------
+  function setStatus(text, cls, live) {
+    $("statusText").textContent = text;
+    $("dot").className = "dot" + (cls ? " " + cls : "") + (live ? " live" : "");
+  }
+  function statusLine() {
+    if (state.error || !state.fetchedAt) return;
+    const t = new Date(state.fetchedAt).toLocaleTimeString("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+    const mins = Math.max(0, Math.round((state.nextAt - Date.now()) / 60000));
+    const res = state.step <= 15 * 60e3 ? "15-Minuten-Auflösung" : "Stundenauflösung";
+    if (state.snapshot) { setStatus(`Gespeicherter Stand vom ${new Date(state.fetchedAt).toLocaleString("de-DE", { timeZone: TZ, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} Uhr · Quelle ${state.source} (${res}) · Live-Abruf auf dieser Seite nicht möglich`, "warn", false); return; }
+    setStatus(`Live · ${clock.format(new Date())} · Quelle ${state.source} (${res}) · geladen ${t} Uhr · nächste Abfrage in ${mins} min`, "", true);
+  }
+
+  function kpi(label, val, note, hero) {
+    const d = document.createElement("div"); d.className = "kpi" + (hero ? " hero" : "");
+    const l = document.createElement("div"); l.className = "l"; l.textContent = label;
+    const v = document.createElement("div"); v.className = "v"; v.textContent = val;
+    const u = document.createElement("small"); u.textContent = val === "–" ? "" : unitLabel(); v.appendChild(u);
+    const n = document.createElement("div"); n.className = "n"; n.textContent = note || " ";
+    d.append(l, v, n); return d;
+  }
+
+  function render() {
+    const today = todayStr(), tomorrow = addDays(today, 1);
+    const pT = state.points.filter(x => x.d === today), pM = state.points.filter(x => x.d === tomorrow);
+    const now = Date.now();
+    const cur = state.points.find(x => x.t <= now && now < x.e);
+    const sT = stats(pT), sM = stats(pM);
+    $("subtitle").textContent = `${dayLabel.format(new Date())} und ${dayLabel.format(new Date(Date.parse(tomorrow + "T12:00:00Z")))} · Gebotszone ${state.zone}`;
+
+    const k = $("kpis"); k.replaceChildren();
+    k.append(kpi("Aktueller Preis", cur ? fmt(cur.p) : "–", cur ? `${hm(cur.t)}–${hm(cur.e)} Uhr` : "kein Wert für jetzt", true));
+    k.append(kpi("Ø heute", sT ? fmt(sT.avg) : "–", sT ? `Min ${fmt(sT.min.p)} (${hm(sT.min.t)}) · Max ${fmt(sT.max.p)} (${hm(sT.max.t)})` : ""));
+    k.append(kpi("Ø morgen", sM ? fmt(sM.avg) : "–", sM ? `Min ${fmt(sM.min.p)} (${hm(sM.min.t)}) · Max ${fmt(sM.max.p)} (${hm(sM.max.t)})` : "noch nicht veröffentlicht (ca. 13 Uhr)"));
+    let delta = "–", dn = "";
+    if (sT && sM) { const d = sM.avg - sT.avg; delta = (d > 0 ? "+" : "") + fmt(d); dn = `${d >= 0 ? "+" : ""}${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(d / Math.abs(sT.avg || 1) * 100)} % ggü. heute`; }
+    k.append(kpi("Morgen vs. heute (Ø)", delta, dn));
+
+    $("combinedMeta").textContent = state.error && !state.points.length ? "" :
+      `${state.points.length} Werte · ${unitLabel()} · Spanne ${fmt(Math.min(...state.points.map(x => x.p)))} bis ${fmt(Math.max(...state.points.map(x => x.p)))}`;
+    drawChart($("chartAll"), state.points, today);
+    renderCheap(now);
+    renderHours(state.day === 0 ? pT : pM, state.day === 0 ? "heute" : "morgen");
+    statusLine();
+  }
+
+  function colorFor(p, q1, q2) {
+    if (p < 0) return "var(--neg)";
+    return p <= q1 ? "var(--low)" : p <= q2 ? "var(--mid)" : "var(--high)";
+  }
+
+  function drawChart(el, pts, today) {
+    el.replaceChildren();
+    if (!pts.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = state.error ? "Keine Daten – " + state.error : "Keine Daten"; el.append(e); return; }
+    const W = Math.max(320, el.clientWidth), H = W < 520 ? 220 : 300;
+    const m = { t: 10, r: 8, b: 26, l: 44 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const sorted = pts.map(x => x.p).sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length / 3)], q2 = sorted[Math.floor(sorted.length * 2 / 3)];
+    const t0 = Date.parse(today + "T00:00:00Z"); // nur als Referenz; x-Achse aus Daten
+    const xs = pts[0].t, xe = Math.max(pts[pts.length - 1].e, xs + 24 * 3600e3);
+    const vals = pts.map(x => conv(x.p));
+    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const pad = (hi - lo) * 0.08 || 1; hi += pad; if (lo < 0) lo -= pad;
+    const X = (t) => m.l + (t - xs) / (xe - xs) * iw;
+    const Y = (v) => m.t + (hi - v) / (hi - lo) * ih;
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+    svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Day-Ahead-Preise heute und morgen");
+    const mk = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); (parent || svg).appendChild(n); return n; };
+
+    // y-Gitter
+    const ticks = niceTicks(lo, hi, 5);
+    const g = mk("g", { class: "grid axis" });
+    for (const v of ticks) {
+      mk("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }, g);
+      const tx = mk("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }, g); tx.textContent = nf().format(v).replace(/,00$/, "");
+    }
+    if (lo < 0) mk("line", { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), class: "zero" });
+
+    // Balken
+    const bw = Math.max(1, (X(xs + state.step) - X(xs)) - (state.step < 3600e3 ? 0.4 : 1.5));
+    const bars = mk("g", {});
+    for (const x of pts) {
+      const v = conv(x.p), y0 = Y(0), y1 = Y(v);
+      mk("rect", { x: X(x.t), y: Math.min(y0, y1), width: bw, height: Math.max(0.5, Math.abs(y1 - y0)), fill: colorFor(x.p, q1, q2), rx: bw > 4 ? 1.5 : 0 }, bars);
+    }
+
+    // x-Achse: alle 3 bzw. 6 Stunden + Tagestrenner
+    const ax = mk("g", { class: "axis" });
+    const every = iw < 600 ? 6 : 3;
+    for (let t = xs; t <= xe; t += 3600e3) {
+      const b = berlin(t);
+      if (b.m !== 0) continue;
+      if (b.h === 0 && t > xs && t < xe) {
+        mk("line", { x1: X(t), x2: X(t), y1: m.t, y2: m.t + ih, stroke: "var(--muted)", "stroke-width": 1 }, ax);
+        const lab = mk("text", { x: X(t) + 4, y: m.t + 11 }, ax); lab.textContent = "morgen →";
+      }
+      if (b.h % every === 0 && t < xe) { const tx = mk("text", { x: X(t), y: H - 8, "text-anchor": "middle" }, ax); tx.textContent = String(b.h).padStart(2, "0") + ":00"; }
+    }
+    // Jetzt-Linie
+    const now = Date.now();
+    if (now >= xs && now <= xe) { mk("line", { x1: X(now), x2: X(now), y1: m.t - 4, y2: m.t + ih, stroke: "var(--now)", "stroke-width": 2 }); }
+
+    el.appendChild(svg);
+    // Tooltip
+    const tip = document.createElement("div"); tip.className = "tip"; el.appendChild(tip);
+    const hl = mk("rect", { y: m.t, height: ih, width: bw, fill: "var(--ink)", opacity: 0, "pointer-events": "none" });
+    function move(clientX) {
+      const r = svg.getBoundingClientRect(); const sx = (clientX - r.left) * (W / r.width);
+      const t = xs + (sx - m.l) / iw * (xe - xs);
+      const p = pts.find(x => x.t <= t && t < x.e); if (!p) { hide(); return; }
+      hl.setAttribute("x", X(p.t)); hl.setAttribute("opacity", 0.08);
+      tip.textContent = `${p.d === today ? "Heute" : "Morgen"} ${hm(p.t)}–${hm(p.e)}: ${fmt(p.p)} ${unitLabel()}`;
+      const px = (X(p.t) + bw / 2) * (r.width / W);
+      tip.style.left = Math.min(r.width - 90, Math.max(90, px)) + "px";
+      tip.style.top = (Y(Math.max(0, conv(p.p))) * (r.height / H)) + "px"; tip.style.opacity = 1;
+    }
+    function hide() { tip.style.opacity = 0; hl.setAttribute("opacity", 0); }
+    svg.addEventListener("pointermove", e => move(e.clientX));
+    svg.addEventListener("pointerdown", e => move(e.clientX));
+    svg.addEventListener("pointerleave", hide);
+  }
+
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6)); return out;
+  }
+
+  function renderCheap(now) {
+    const el = $("cheap"); el.replaceChildren();
+    const future = state.points.filter(x => x.e > now);
+    if (!future.length) { el.innerHTML = '<div class="empty">Keine Daten</div>'; return; }
+    const t = document.createElement("table");
+    t.innerHTML = '<thead><tr><th>Dauer</th><th>Zeitraum</th><th class="r">Ø Preis</th></tr></thead>';
+    const tb = document.createElement("tbody");
+    for (const [lab, h] of [["1 Stunde", 1], ["2 Stunden", 2], ["3 Stunden", 3], ["4 Stunden", 4]]) {
+      const b = cheapestBlock(future, h * 3600e3); if (!b) continue;
+      const tr = document.createElement("tr");
+      const d = berlin(b.start).date === todayStr() ? "heute" : "morgen";
+      const c1 = document.createElement("td"); c1.textContent = lab;
+      const c2 = document.createElement("td"); c2.textContent = `${d} ${hm(b.start)}–${hm(b.end)}`;
+      const c3 = document.createElement("td"); c3.className = "r"; c3.textContent = `${fmt(b.avg)} ${unitLabel()}`;
+      tr.append(c1, c2, c3); tb.append(tr);
+    }
+    t.append(tb); el.append(t);
+  }
+
+  function renderHours(pts, label) {
+    const el = $("hourTable"); el.replaceChildren();
+    if (!pts.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = label === "morgen" ? "Preise für morgen sind noch nicht veröffentlicht." : "Keine Daten"; el.append(e); return; }
+    const byH = new Map();
+    for (const x of pts) { const h = berlin(x.t).h; if (!byH.has(h)) byH.set(h, []); byH.get(h).push(x.p); }
+    const rows = [...byH.entries()].map(([h, a]) => ({ h, avg: a.reduce((s, v) => s + v, 0) / a.length, min: Math.min(...a), max: Math.max(...a) }));
+    const sorted = rows.map(r => r.avg).sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length / 3)], q2 = sorted[Math.floor(sorted.length * 2 / 3)];
+    const multi = state.step < 3600e3;
+    $("hourMeta").textContent = multi ? "Mittel je Stunde aus 15-Minuten-Werten, mit Spanne" : "Stundenpreise";
+    const nowH = berlin(Date.now()).h;
+    const t = document.createElement("table");
+    t.innerHTML = `<thead><tr><th>Stunde</th><th class="r">Ø ${unitLabel()}</th>${multi ? '<th class="r">Min</th><th class="r">Max</th>' : ""}</tr></thead>`;
+    const tb = document.createElement("tbody");
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      if (label === "heute" && r.h === nowH) tr.style.fontWeight = "650";
+      const c1 = document.createElement("td");
+      const sw = document.createElement("i"); sw.className = "sw"; sw.style.background = colorFor(r.avg, q1, q2); sw.style.marginRight = "8px";
+      c1.append(sw, document.createTextNode(`${String(r.h).padStart(2, "0")}–${String((r.h + 1) % 24).padStart(2, "0")} Uhr`));
+      const c2 = document.createElement("td"); c2.className = "r"; c2.textContent = fmt(r.avg);
+      tr.append(c1, c2);
+      if (multi) { const a = document.createElement("td"), b = document.createElement("td"); a.className = b.className = "r"; a.textContent = fmt(r.min); b.textContent = fmt(r.max); tr.append(a, b); }
+      tb.append(tr);
+    }
+    t.append(tb); el.append(t);
+  }
+
+  // ---------- Bedienung ----------
+  function savePrefs() { try { localStorage.setItem("dapPrefs", JSON.stringify({ zone: state.zone, unit: state.unit })); } catch (e) {} }
+  $("zone").value = state.zone;
+  $("zone").addEventListener("change", e => { state.zone = e.target.value; savePrefs(); state.points = []; load(); });
+  for (const b of $("unitSeg").querySelectorAll("button")) {
+    b.classList.toggle("on", b.dataset.unit === state.unit);
+    b.addEventListener("click", () => { state.unit = b.dataset.unit; savePrefs(); for (const x of $("unitSeg").children) x.classList.toggle("on", x === b); render(); });
+  }
+  for (const b of $("daySeg").querySelectorAll("button")) b.addEventListener("click", () => { state.day = +b.dataset.day; for (const x of $("daySeg").children) x.classList.toggle("on", x === b); render(); });
+  $("refresh").addEventListener("click", load);
+  let lastDay = todayStr(), rt;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 120); });
+  // Jede Minute: Jetzt-Marker & aktuellen Preis weiterschieben; bei Datumswechsel neu laden
+  setInterval(() => {
+    if (todayStr() !== lastDay) { lastDay = todayStr(); load(); return; }
+    if (state.points.length) render(); else statusLine();
+  }, 30e3);
+  setInterval(statusLine, 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.fetchedAt && Date.now() - state.fetchedAt > 15 * 60e3) load(); });
+  load();
+})();
+</script>
+</body>
+</html>
