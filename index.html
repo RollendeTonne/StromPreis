@@ -56,6 +56,7 @@
   table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
   th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
   th{color:var(--muted);font-weight:500;font-size:12px}
+  #hourTable thead th{position:sticky;top:0;background:var(--card);z-index:1}
   td.r,th.r{text-align:right}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
   .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -117,8 +118,8 @@
       <div id="cheap"></div>
     </div>
     <div class="card" id="hourCard">
-      <h2>Stundenwerte</h2>
-      <div class="meta" id="hourMeta">Mittel je Stunde</div>
+      <h2>Viertelstundenwerte</h2>
+      <div class="meta" id="hourMeta">15-Minuten-Werte</div>
       <div class="seg" id="daySeg" style="margin-bottom:8px">
         <button data-day="0" class="on">Heute</button>
         <button data-day="1">Morgen</button>
@@ -395,32 +396,37 @@
     t.append(tb); el.append(t);
   }
 
+  let scrollPending = true;
   function renderHours(pts, label) {
-    const el = $("hourTable"); el.replaceChildren();
-    if (!pts.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = label === "morgen" ? "Preise für morgen sind noch nicht veröffentlicht." : "Keine Daten"; el.append(e); return; }
-    const byH = new Map();
-    for (const x of pts) { const h = berlin(x.t).h; if (!byH.has(h)) byH.set(h, []); byH.get(h).push(x.p); }
-    const rows = [...byH.entries()].map(([h, a]) => ({ h, avg: a.reduce((s, v) => s + v, 0) / a.length, min: Math.min(...a), max: Math.max(...a) }));
-    const sorted = rows.map(r => r.avg).sort((a, b) => a - b);
+    const box = $("hourTable"), keep = box.scrollTop; box.replaceChildren();
+    if (!pts.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = label === "morgen" ? "Preise für morgen sind noch nicht veröffentlicht." : "Keine Daten"; box.append(e); return; }
+    const sorted = pts.map(x => x.p).sort((a, b) => a - b);
     const q1 = sorted[Math.floor(sorted.length / 3)], q2 = sorted[Math.floor(sorted.length * 2 / 3)];
-    const multi = state.step < 3600e3;
-    $("hourMeta").textContent = multi ? "Mittel je Stunde aus 15-Minuten-Werten, mit Spanne" : "Stundenpreise";
-    const nowH = berlin(Date.now()).h;
+    const avg = pts.reduce((s, x) => s + x.p, 0) / pts.length;
+    const quarter = state.step < 3600e3;
+    $("hourMeta").textContent = quarter ? `${pts.length} Viertelstundenwerte · Abweichung vom Tagesmittel` : "Stundenpreise (Quelle liefert keine 15-Minuten-Werte)";
+    const now = Date.now();
     const t = document.createElement("table");
-    t.innerHTML = `<thead><tr><th>Stunde</th><th class="r">Ø ${unitLabel()}</th>${multi ? '<th class="r">Min</th><th class="r">Max</th>' : ""}</tr></thead>`;
+    t.innerHTML = `<thead><tr><th>Zeitraum</th><th class="r">${unitLabel()}</th><th class="r">ggü. Ø</th></tr></thead>`;
     const tb = document.createElement("tbody");
-    for (const r of rows) {
+    let curRow = null;
+    for (const x of pts) {
       const tr = document.createElement("tr");
-      if (label === "heute" && r.h === nowH) tr.style.fontWeight = "650";
+      const isNow = x.t <= now && now < x.e;
+      if (isNow) { tr.style.fontWeight = "650"; tr.style.background = "color-mix(in srgb, var(--accent) 12%, transparent)"; curRow = tr; }
+      else if (x.e <= now) tr.style.opacity = "0.55";
       const c1 = document.createElement("td");
-      const sw = document.createElement("i"); sw.className = "sw"; sw.style.background = colorFor(r.avg, q1, q2); sw.style.marginRight = "8px";
-      c1.append(sw, document.createTextNode(`${String(r.h).padStart(2, "0")}–${String((r.h + 1) % 24).padStart(2, "0")} Uhr`));
-      const c2 = document.createElement("td"); c2.className = "r"; c2.textContent = fmt(r.avg);
-      tr.append(c1, c2);
-      if (multi) { const a = document.createElement("td"), b = document.createElement("td"); a.className = b.className = "r"; a.textContent = fmt(r.min); b.textContent = fmt(r.max); tr.append(a, b); }
-      tb.append(tr);
+      const sw = document.createElement("i"); sw.className = "sw"; sw.style.background = colorFor(x.p, q1, q2); sw.style.marginRight = "8px";
+      c1.append(sw, document.createTextNode(`${hm(x.t)}–${hm(x.e)}${isNow ? "  · jetzt" : ""}`));
+      const c2 = document.createElement("td"); c2.className = "r"; c2.textContent = fmt(x.p);
+      const d = x.p - avg;
+      const c3 = document.createElement("td"); c3.className = "r"; c3.textContent = (d > 0 ? "+" : "") + fmt(d);
+      c3.style.color = d < 0 ? "var(--low)" : d > 0 ? "var(--high)" : "";
+      tr.append(c1, c2, c3); tb.append(tr);
     }
-    t.append(tb); el.append(t);
+    t.append(tb); box.append(t);
+    if (scrollPending) { scrollPending = false; box.scrollTop = curRow ? Math.max(0, curRow.offsetTop - 80) : 0; }
+    else box.scrollTop = keep;
   }
 
   // ---------- Bedienung ----------
@@ -431,7 +437,7 @@
     b.classList.toggle("on", b.dataset.unit === state.unit);
     b.addEventListener("click", () => { state.unit = b.dataset.unit; savePrefs(); for (const x of $("unitSeg").children) x.classList.toggle("on", x === b); render(); });
   }
-  for (const b of $("daySeg").querySelectorAll("button")) b.addEventListener("click", () => { state.day = +b.dataset.day; for (const x of $("daySeg").children) x.classList.toggle("on", x === b); render(); });
+  for (const b of $("daySeg").querySelectorAll("button")) b.addEventListener("click", () => { state.day = +b.dataset.day; scrollPending = true; for (const x of $("daySeg").children) x.classList.toggle("on", x === b); render(); });
   $("refresh").addEventListener("click", load);
   let lastDay = todayStr(), rt;
   window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 120); });
