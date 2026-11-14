@@ -190,7 +190,17 @@
     const today = todayStr(), tomorrow = addDays(today, 1);
     const d0 = addDays(today, -1), d3 = addDays(today, 3); // großzügig, dann nach Berliner Datum filtern
     let res = null, errs = [];
-    try { res = await fetchEnergyCharts(state.zone, d0, d3); } catch (e) { errs.push(e.message); }
+    if (state.zone === "DE-LU") {
+      try {
+        const r = await fetch("prices.json?t=" + Date.now(), { cache: "no-store" });
+        if (!r.ok) throw new Error("prices.json HTTP " + r.status);
+        const j = await r.json(), pts = [];
+        for (let i = 0; i < (j.unix_seconds || []).length; i++) if (j.price[i] != null) pts.push({ t: j.unix_seconds[i] * 1000, p: +j.price[i] });
+        if (!pts.some(x => berlin(x.t).date === today)) throw new Error("prices.json enthält keine Werte für heute");
+        res = { pts, source: "Energy-Charts", dataAt: j.fetched ? Date.parse(j.fetched) : null };
+      } catch (e) { errs.push(e.message); }
+    }
+    if (!res) try { res = await fetchEnergyCharts(state.zone, d0, d3); } catch (e) { errs.push(e.message); }
     if (!res) {
       try { res = await fetchAwattar(state.zone, Date.parse(d0 + "T00:00:00Z"), Date.parse(d3 + "T00:00:00Z")); } catch (e) { errs.push(e.message); }
     }
@@ -210,7 +220,7 @@
     state.points = res.pts
       .map(x => ({ t: x.t, e: x.e || x.t + step, p: x.p, d: berlin(x.t).date }))
       .filter(x => x.d === today || x.d === tomorrow);
-    state.source = res.source; state.snapshot = !!res.snapshot; state.fetchedAt = res.snapshot ? Date.parse(SNAPSHOT.fetched) : Date.now(); state.error = null;
+    state.dataAt = res.dataAt || null; state.source = res.source; state.snapshot = !!res.snapshot; state.fetchedAt = res.snapshot ? Date.parse(SNAPSHOT.fetched) : Date.now(); state.error = null;
     render(); scheduleNext();
   }
 
@@ -256,7 +266,7 @@
     const mins = Math.max(0, Math.round((state.nextAt - Date.now()) / 60000));
     const res = state.step <= 15 * 60e3 ? "15-Minuten-Auflösung" : "Stundenauflösung";
     if (state.snapshot) { setStatus(`Gespeicherter Stand vom ${new Date(state.fetchedAt).toLocaleString("de-DE", { timeZone: TZ, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} Uhr · Quelle ${state.source} (${res}) · Live-Abruf auf dieser Seite nicht möglich`, "warn", false); return; }
-    setStatus(`Live · ${clock.format(new Date())} · Quelle ${state.source} (${res}) · geladen ${t} Uhr · nächste Abfrage in ${mins} min`, "", true);
+    setStatus(`Live · ${clock.format(new Date())} · Quelle ${state.source} (${res})${state.dataAt ? ` · Datenstand ${new Date(state.dataAt).toLocaleTimeString("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })} Uhr` : ""} · geladen ${t} Uhr · nächste Abfrage in ${mins} min`, "", true);
   }
 
   function kpi(label, val, note, hero) {

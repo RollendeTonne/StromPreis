@@ -1,0 +1,47 @@
+name: Strompreise aktualisieren
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"   # alle 30 Minuten (UTC)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/prices.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Day-Ahead-Preise DE-LU von Energy-Charts holen
+        run: |
+          TODAY=$(TZ=Europe/Berlin date +%F)
+          START=$(date -d "$TODAY -1 day" +%F)
+          END=$(date -d "$TODAY +2 day" +%F)
+          curl -fsS --retry 3 --max-time 60 \
+            "https://api.energy-charts.info/price?bzn=DE-LU&start=$START&end=$END" -o raw.json
+          jq -e '(.price | length) > 0' raw.json > /dev/null
+          jq --arg at "$(date -u +%FT%TZ)" \
+            '{unix_seconds, price, unit, license_info, fetched: $at}' raw.json > new.json
+          rm raw.json
+
+      - name: Nur bei geänderten Preisen committen
+        run: |
+          if [ -f prices.json ] && \
+             [ "$(jq -c '{unix_seconds, price}' prices.json)" = "$(jq -c '{unix_seconds, price}' new.json)" ]; then
+            echo "Keine neuen Preise."; rm new.json; exit 0
+          fi
+          mv new.json prices.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git add prices.json
+          git commit -m "Strompreise aktualisiert ($(TZ=Europe/Berlin date '+%d.%m.%Y %H:%M'))"
+          git push
